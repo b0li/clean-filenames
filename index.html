@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Clean Filenames – SEO-konforme Dateinamen</title>
+	<meta name="description" content="Dateien per Drag &amp; Drop reinziehen und SEO-konform sauber benannt wieder herunterladen. Läuft komplett im Browser, kein Upload.">
+
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+	<style>
+		:root {
+			--bg: #1a1d23;
+			--surface: #22262e;
+			--surface-2: #2a2f39;
+			--border: #333844;
+			--accent: #d4a55a;
+			--accent-dim: rgba( 212, 165, 90, 0.15 );
+			--green: #6abf69;
+			--red: #e06c6c;
+			--text: #e8eaf0;
+			--text-dim: #8a909e;
+			--radius: 10px;
+		}
+
+		* {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0;
+		}
+
+		body {
+			background: var( --bg );
+			color: var( --text );
+			font-family: 'DM Sans', system-ui, sans-serif;
+			min-height: 100vh;
+			padding: 32px 16px 64px;
+		}
+
+		.wrap {
+			max-width: 760px;
+			margin: 0 auto;
+		}
+
+		/* Header */
+		header {
+			text-align: center;
+			margin-bottom: 28px;
+		}
+
+		h1 {
+			font-family: 'DM Serif Display', serif;
+			font-weight: 400;
+			font-size: 2rem;
+			color: var( --accent );
+			line-height: 1.1;
+		}
+
+		.subtitle {
+			font-size: 0.9rem;
+			color: var( --text-dim );
+			margin-top: 6px;
+		}
+
+		/* Cards */
+		.card {
+			background: var( --surface );
+			border-radius: var( --radius );
+			border: 1px solid var( --border );
+			padding: 14px 16px;
+			margin-bottom: 16px;
+		}
+
+		/* Options */
+		.options {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 18px;
+		}
+
+		.opt {
+			display: flex;
+			align-items: center;
+			gap: 9px;
+			font-size: 0.85rem;
+			color: var( --text-dim );
+			cursor: pointer;
+			user-select: none;
+		}
+
+		.opt input {
+			position: absolute;
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		.toggle {
+			width: 38px;
+			height: 22px;
+			border-radius: 11px;
+			background: var( --surface-2 );
+			border: 1px solid var( --border );
+			position: relative;
+			flex-shrink: 0;
+			transition: background 0.15s, border-color 0.15s;
+		}
+
+		.toggle::after {
+			content: '';
+			position: absolute;
+			top: 2px;
+			left: 2px;
+			width: 16px;
+			height: 16px;
+			border-radius: 50%;
+			background: var( --text-dim );
+			transition: transform 0.15s, background 0.15s;
+		}
+
+		.opt input:checked + .toggle {
+			background: var( --accent-dim );
+			border-color: var( --accent );
+		}
+
+		.opt input:checked + .toggle::after {
+			transform: translateX( 16px );
+			background: var( --accent );
+		}
+
+		.opt input:focus-visible + .toggle {
+			outline: 2px solid var( --accent );
+			outline-offset: 2px;
+		}
+
+		/* Drop zone */
+		.drop {
+			border: 2px dashed var( --border );
+			border-radius: var( --radius );
+			background: var( --surface );
+			padding: 44px 20px;
+			text-align: center;
+			cursor: pointer;
+			transition: border-color 0.15s, background 0.15s;
+			margin-bottom: 16px;
+		}
+
+		.drop:hover,
+		.drop.is-drag {
+			border-color: var( --accent );
+			background: var( --accent-dim );
+		}
+
+		.drop__title {
+			font-size: 0.95rem;
+			font-weight: 600;
+			color: var( --text );
+		}
+
+		.drop__hint {
+			font-size: 0.85rem;
+			color: var( --text-dim );
+			margin-top: 6px;
+		}
+
+		/* File list */
+		.list {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.file {
+			background: var( --surface );
+			border: 1px solid var( --border );
+			border-radius: var( --radius );
+			padding: 12px 14px;
+			display: flex;
+			align-items: center;
+			gap: 14px;
+		}
+
+		.file__names {
+			flex: 1;
+			min-width: 0;
+		}
+
+		.file__orig {
+			font-size: 0.78rem;
+			color: var( --text-dim );
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.file__clean {
+			font-size: 0.92rem;
+			font-weight: 600;
+			color: var( --accent );
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			margin-top: 2px;
+		}
+
+		.file__clean.is-error {
+			color: var( --red );
+		}
+
+		.file__clean.is-unchanged {
+			color: var( --green );
+		}
+
+		.file__actions {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			flex-shrink: 0;
+		}
+
+		/* Buttons */
+		.btn {
+			padding: 8px 18px;
+			border-radius: 6px;
+			font-size: 0.85rem;
+			font-weight: 600;
+			font-family: inherit;
+			border: none;
+			cursor: pointer;
+			transition: opacity 0.15s;
+		}
+
+		.btn:not(:disabled):hover {
+			opacity: 0.85;
+		}
+
+		.btn:disabled {
+			opacity: 0.4;
+			cursor: default;
+		}
+
+		.btn--accent { background: var( --accent ); color: #1a1d23; }
+		.btn--download { background: var( --green ); color: #1a1d23; }
+		.btn--ghost { background: var( --surface-2 ); color: var( --text-dim ); border: 1px solid var( --border ); }
+
+		.btn--icon {
+			background: transparent;
+			border: none;
+			color: var( --text-dim );
+			padding: 6px;
+			font-size: 1rem;
+			line-height: 1;
+			border-radius: 6px;
+		}
+
+		.btn--icon:hover {
+			color: var( --text );
+			opacity: 1;
+		}
+
+		.btn--remove:hover {
+			color: var( --red );
+		}
+
+		/* Batch bar */
+		.batch {
+			display: flex;
+			gap: 10px;
+			align-items: center;
+			margin-top: 16px;
+		}
+
+		.batch__count {
+			font-size: 0.78rem;
+			color: var( --text-dim );
+			margin-right: auto;
+		}
+
+		.hidden {
+			display: none;
+		}
+
+		@media ( max-width: 540px ) {
+			.file {
+				flex-wrap: wrap;
+			}
+
+			.file__actions {
+				width: 100%;
+				justify-content: flex-end;
+			}
+		}
+	</style>
+</head>
+<body>
+
+	<div class="wrap">
+
+		<header>
+			<h1>Clean Filenames</h1>
+			<p class="subtitle">Dateien reinziehen, SEO-konforme Namen rausziehen – alles im Browser, kein Upload.</p>
+		</header>
+
+		<div class="card options">
+
+			<label class="opt">
+				<input type="checkbox" id="optLower" checked>
+				<span class="toggle"></span>
+				Kleinschreibung
+			</label>
+
+			<label class="opt">
+				<input type="checkbox" id="optUmlaut" checked>
+				<span class="toggle"></span>
+				Umlaute ausschreiben (ä → ae)
+			</label>
+
+		</div><!-- end /.options -->
+
+		<div class="drop" id="drop">
+			<div class="drop__title">Dateien hierher ziehen</div>
+			<div class="drop__hint">oder klicken zum Auswählen · beliebige Dateitypen · mehrere möglich</div>
+			<input type="file" id="fileInput" multiple class="hidden">
+		</div><!-- end /.drop -->
+
+		<div class="list" id="list"></div><!-- end /.list -->
+
+		<div class="batch hidden" id="batch">
+			<span class="batch__count" id="batchCount"></span>
+			<button class="btn btn--ghost" id="clearBtn">Leeren</button>
+			<button class="btn btn--download" id="zipBtn">Alle als ZIP</button>
+		</div><!-- end /.batch -->
+
+	</div><!-- end /.wrap -->
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+	<script>
+	(function() {
+		'use strict';
+
+		const drop = document.getElementById( 'drop' );
+		const fileInput = document.getElementById( 'fileInput' );
+		const list = document.getElementById( 'list' );
+		const batch = document.getElementById( 'batch' );
+		const batchCount = document.getElementById( 'batchCount' );
+		const clearBtn = document.getElementById( 'clearBtn' );
+		const zipBtn = document.getElementById( 'zipBtn' );
+		const optLower = document.getElementById( 'optLower' );
+		const optUmlaut = document.getElementById( 'optUmlaut' );
+
+		let items = []; // { file, clean }
+
+		// Prevent the browser from opening files dropped anywhere outside the zone
+		['dragover', 'drop'].forEach( function( evt ) {
+			window.addEventListener( evt, function( e ) {
+				e.preventDefault();
+			}, false );
+		});
+
+		// Transliteration base map (lowercase keys, non-ASCII -> ASCII)
+		const baseMap = {
+			'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'ß': 'ss',
+			'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'å': 'a', 'æ': 'ae',
+			'ç': 'c', 'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+			'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i', 'ñ': 'n',
+			'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ø': 'o', 'œ': 'oe',
+			'ù': 'u', 'ú': 'u', 'û': 'u', 'ý': 'y', 'ÿ': 'y',
+			'š': 's', 'ž': 'z', 'č': 'c', 'ć': 'c', 'đ': 'd', 'ð': 'd', 'þ': 'th'
+		};
+
+		const transliterate = function( str, expandUmlaut ) {
+			const map = Object.assign( {}, baseMap );
+
+			if ( ! expandUmlaut ) {
+				map['ä'] = 'a';
+				map['ö'] = 'o';
+				map['ü'] = 'u';
+			}
+
+			// Replace any non-ASCII char via map, drop the rest
+			return str.replace( /[^\x00-\x7F]/g, function( ch ) {
+				const lower = ch.toLowerCase();
+				return map[lower] !== undefined ? map[lower] : '';
+			});
+		};
+
+		const cleanName = function( filename ) {
+			const opts = {
+				lower: optLower.checked,
+				umlaut: optUmlaut.checked
+			};
+
+			// Split name / extension (keep dotfiles intact)
+			const lastDot = filename.lastIndexOf( '.' );
+			let name = lastDot > 0 ? filename.slice( 0, lastDot ) : filename;
+			let ext = lastDot > 0 ? filename.slice( lastDot + 1 ) : '';
+
+			if ( opts.lower ) {
+				name = name.toLowerCase();
+				ext = ext.toLowerCase();
+			}
+
+			name = transliterate( name, opts.umlaut );
+			ext = transliterate( ext, opts.umlaut );
+
+			// Spaces, underscores and inner dots -> hyphen
+			name = name.replace( /[\s._]+/g, '-' );
+
+			// Strip everything that isn't a-z, A-Z, 0-9 or hyphen
+			name = name.replace( /[^a-zA-Z0-9-]/g, '' );
+			ext = ext.replace( /[^a-zA-Z0-9]/g, '' );
+
+			// Collapse and trim hyphens
+			name = name.replace( /-+/g, '-' ).replace( /^-+|-+$/g, '' );
+
+			if ( ! name ) name = 'datei';
+
+			return ext ? name + '.' + ext : name;
+		};
+
+		const render = function() {
+			list.innerHTML = '';
+
+			items.forEach( function( item, index ) {
+				const changed = item.clean !== item.file.name;
+
+				const row = document.createElement( 'div' );
+				row.className = 'file';
+
+				const names = document.createElement( 'div' );
+				names.className = 'file__names';
+
+				const orig = document.createElement( 'div' );
+				orig.className = 'file__orig';
+				orig.textContent = item.file.name;
+
+				const clean = document.createElement( 'div' );
+				clean.className = 'file__clean' + ( changed ? '' : ' is-unchanged' );
+				clean.textContent = item.clean;
+
+				names.appendChild( orig );
+				names.appendChild( clean );
+
+				const actions = document.createElement( 'div' );
+				actions.className = 'file__actions';
+
+				const copyBtn = document.createElement( 'button' );
+				copyBtn.className = 'btn btn--icon';
+				copyBtn.title = 'Namen kopieren';
+				copyBtn.textContent = '⧉';
+				copyBtn.addEventListener( 'click', function() {
+					navigator.clipboard.writeText( item.clean ).then( function() {
+						copyBtn.textContent = '✓';
+						setTimeout( function() { copyBtn.textContent = '⧉'; }, 1200 );
+					});
+				});
+
+				const dlBtn = document.createElement( 'button' );
+				dlBtn.className = 'btn btn--download';
+				dlBtn.textContent = 'Download';
+				dlBtn.addEventListener( 'click', function() {
+					downloadFile( item.file, item.clean );
+				});
+
+				const rmBtn = document.createElement( 'button' );
+				rmBtn.className = 'btn btn--icon btn--remove';
+				rmBtn.title = 'Entfernen';
+				rmBtn.textContent = '✕';
+				rmBtn.addEventListener( 'click', function() {
+					items.splice( index, 1 );
+					render();
+				});
+
+				actions.appendChild( copyBtn );
+				actions.appendChild( dlBtn );
+				actions.appendChild( rmBtn );
+
+				row.appendChild( names );
+				row.appendChild( actions );
+				list.appendChild( row );
+			});
+
+			if ( items.length ) {
+				batch.classList.remove( 'hidden' );
+				batchCount.textContent = items.length + ( items.length === 1 ? ' Datei' : ' Dateien' );
+			} else {
+				batch.classList.add( 'hidden' );
+			}
+		};
+
+		const downloadFile = function( file, name ) {
+			const url = URL.createObjectURL( file );
+			const a = document.createElement( 'a' );
+			a.href = url;
+			a.download = name;
+			document.body.appendChild( a );
+			a.click();
+			a.remove();
+			setTimeout( function() { URL.revokeObjectURL( url ); }, 1000 );
+		};
+
+		const addFiles = function( fileList ) {
+			Array.from( fileList ).forEach( function( file ) {
+				items.push( { file: file, clean: cleanName( file.name ) } );
+			});
+			render();
+		};
+
+		const recompute = function() {
+			items.forEach( function( item ) {
+				item.clean = cleanName( item.file.name );
+			});
+			render();
+		};
+
+		// Drag & drop
+		drop.addEventListener( 'click', function() {
+			fileInput.click();
+		});
+
+		fileInput.addEventListener( 'change', function() {
+			addFiles( fileInput.files );
+			fileInput.value = '';
+		});
+
+		['dragenter', 'dragover'].forEach( function( evt ) {
+			drop.addEventListener( evt, function( e ) {
+				e.preventDefault();
+				drop.classList.add( 'is-drag' );
+			});
+		});
+
+		['dragleave', 'drop'].forEach( function( evt ) {
+			drop.addEventListener( evt, function( e ) {
+				e.preventDefault();
+				drop.classList.remove( 'is-drag' );
+			});
+		});
+
+		drop.addEventListener( 'drop', function( e ) {
+			if ( e.dataTransfer.files.length ) addFiles( e.dataTransfer.files );
+		});
+
+		// Options change -> recompute live
+		optLower.addEventListener( 'change', recompute );
+		optUmlaut.addEventListener( 'change', recompute );
+
+		// Batch actions
+		clearBtn.addEventListener( 'click', function() {
+			items = [];
+			render();
+		});
+
+		zipBtn.addEventListener( 'click', function() {
+			if ( ! items.length ) return;
+
+			const zip = new JSZip();
+			const used = {};
+
+			items.forEach( function( item ) {
+				let name = item.clean;
+
+				// Avoid collisions inside the ZIP
+				if ( used[name] ) {
+					const dot = name.lastIndexOf( '.' );
+					const base = dot > 0 ? name.slice( 0, dot ) : name;
+					const ext = dot > 0 ? name.slice( dot ) : '';
+					name = base + '-' + ( ++used[item.clean] ) + ext;
+				} else {
+					used[item.clean] = 1;
+				}
+
+				zip.file( name, item.file );
+			});
+
+			zip.generateAsync( { type: 'blob' } ).then( function( blob ) {
+				const url = URL.createObjectURL( blob );
+				const a = document.createElement( 'a' );
+				a.href = url;
+				a.download = 'clean-filenames.zip';
+				document.body.appendChild( a );
+				a.click();
+				a.remove();
+				setTimeout( function() { URL.revokeObjectURL( url ); }, 1000 );
+			});
+		});
+	})();
+	</script>
+
+</body>
+</html>
