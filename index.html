@@ -74,6 +74,33 @@
 		}
 
 		/* Options */
+		.seq {
+			display: flex;
+			flex-direction: column;
+			gap: 7px;
+		}
+
+		.seq__label {
+			font-size: 0.85rem;
+			color: var( --text-dim );
+		}
+
+		.seq__input {
+			width: 100%;
+			background: var( --surface-2 );
+			border: 1px solid var( --border );
+			border-radius: 6px;
+			color: var( --text );
+			font-family: inherit;
+			font-size: 0.9rem;
+			padding: 8px 10px;
+			outline: none;
+		}
+
+		.seq__input:focus {
+			border-color: var( --accent );
+		}
+
 		.options {
 			display: flex;
 			flex-wrap: wrap;
@@ -223,6 +250,12 @@
 			border-bottom-color: var( --accent );
 		}
 
+		.file__input:disabled {
+			color: var( --text-dim );
+			border-bottom-color: transparent;
+			cursor: default;
+		}
+
 		.file__ext {
 			flex-shrink: 0;
 			color: var( --text-dim );
@@ -335,7 +368,18 @@
 				Umlaute ausschreiben (ä → ae)
 			</label>
 
+			<label class="opt">
+				<input type="checkbox" id="optSeq">
+				<span class="toggle"></span>
+				Durchnummerieren
+			</label>
+
 		</div><!-- end /.options -->
+
+		<div class="card seq hidden" id="seqRow">
+			<label class="seq__label" for="seqInput">Basisname für alle Dateien</label>
+			<input type="text" id="seqInput" class="seq__input" placeholder="z.B. aussenansicht" spellcheck="false">
+		</div><!-- end /.seq -->
 
 		<div class="drop" id="drop">
 			<div class="drop__title">Dateien hierher ziehen</div>
@@ -367,8 +411,11 @@
 		const zipBtn = document.getElementById( 'zipBtn' );
 		const optLower = document.getElementById( 'optLower' );
 		const optUmlaut = document.getElementById( 'optUmlaut' );
+		const optSeq = document.getElementById( 'optSeq' );
+		const seqRow = document.getElementById( 'seqRow' );
+		const seqInput = document.getElementById( 'seqInput' );
 
-		let items = []; // { file, clean }
+		let items = []; // { file, base, ext, edited, manualBase }
 
 		// Prevent the browser from opening files dropped anywhere outside the zone
 		['dragover', 'drop'].forEach( function( evt ) {
@@ -470,20 +517,26 @@
 				input.spellcheck = false;
 				input.setAttribute( 'aria-label', 'Dateiname bearbeiten' );
 
-				const commit = function() {
-					const slug = slugify( input.value );
-					input.value = slug;
-					item.base = slug;
-					item.edited = true;
-				};
+				// In numbering mode the names are auto-generated -> lock the field
+				if ( optSeq.checked ) {
+					input.disabled = true;
+				} else {
+					const commit = function() {
+						const slug = slugify( input.value );
+						input.value = slug;
+						item.base = slug;
+						item.manualBase = input.value;
+						item.edited = true;
+					};
 
-				input.addEventListener( 'blur', commit );
-				input.addEventListener( 'keydown', function( e ) {
-					if ( e.key === 'Enter' ) {
-						e.preventDefault();
-						input.blur();
-					}
-				});
+					input.addEventListener( 'blur', commit );
+					input.addEventListener( 'keydown', function( e ) {
+						if ( e.key === 'Enter' ) {
+							e.preventDefault();
+							input.blur();
+						}
+					});
+				}
 
 				edit.appendChild( input );
 
@@ -524,7 +577,7 @@
 				rmBtn.textContent = '✕';
 				rmBtn.addEventListener( 'click', function() {
 					items.splice( index, 1 );
-					render();
+					recompute();
 				});
 
 				actions.appendChild( copyBtn );
@@ -563,23 +616,35 @@
 					file: file,
 					base: slugify( parts.base ),
 					ext: cleanExt( parts.ext ),
-					edited: false
+					edited: false,
+					manualBase: ''
 				});
 			});
-			render();
+			recompute();
 		};
 
 		const recompute = function() {
-			items.forEach( function( item ) {
-				if ( item.edited ) {
-					// Keep manual name, but still apply the global format toggles
-					item.base = slugify( item.base );
-				} else {
-					const parts = splitOriginal( item.file.name );
-					item.base = slugify( parts.base );
-					item.ext = cleanExt( parts.ext );
-				}
-			});
+			if ( optSeq.checked ) {
+				// Sequential numbering: one base name for all files, in list order
+				const base = slugify( seqInput.value );
+				const width = Math.max( 2, String( items.length ).length );
+
+				items.forEach( function( item, i ) {
+					item.base = base + '-' + String( i + 1 ).padStart( width, '0' );
+				});
+			} else {
+				items.forEach( function( item ) {
+					if ( item.edited ) {
+						// Keep manual name, but still apply the global format toggles
+						item.base = slugify( item.manualBase );
+					} else {
+						const parts = splitOriginal( item.file.name );
+						item.base = slugify( parts.base );
+						item.ext = cleanExt( parts.ext );
+					}
+				});
+			}
+
 			render();
 		};
 
@@ -614,6 +679,15 @@
 		// Options change -> recompute live
 		optLower.addEventListener( 'change', recompute );
 		optUmlaut.addEventListener( 'change', recompute );
+
+		// Sequential numbering toggle + base name input
+		optSeq.addEventListener( 'change', function() {
+			seqRow.classList.toggle( 'hidden', ! optSeq.checked );
+			if ( optSeq.checked ) seqInput.focus();
+			recompute();
+		});
+
+		seqInput.addEventListener( 'input', recompute );
 
 		// Batch actions
 		clearBtn.addEventListener( 'click', function() {
