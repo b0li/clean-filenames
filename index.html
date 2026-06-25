@@ -194,22 +194,41 @@
 			text-overflow: ellipsis;
 		}
 
-		.file__clean {
+		.file__edit {
+			display: flex;
+			align-items: center;
+			margin-top: 2px;
+			min-width: 0;
+		}
+
+		.file__input {
+			flex: 1;
+			min-width: 0;
+			background: transparent;
+			border: none;
+			border-bottom: 1px dashed transparent;
+			color: var( --accent );
+			font-family: inherit;
 			font-size: 0.92rem;
 			font-weight: 600;
-			color: var( --accent );
-			white-space: nowrap;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			margin-top: 2px;
+			padding: 1px 0;
+			outline: none;
 		}
 
-		.file__clean.is-error {
-			color: var( --red );
+		.file__input:hover {
+			border-bottom-color: var( --border );
 		}
 
-		.file__clean.is-unchanged {
-			color: var( --green );
+		.file__input:focus {
+			border-bottom-color: var( --accent );
+		}
+
+		.file__ext {
+			flex-shrink: 0;
+			color: var( --text-dim );
+			font-size: 0.92rem;
+			font-weight: 600;
+			padding-left: 1px;
 		}
 
 		.file__actions {
@@ -385,46 +404,51 @@
 			});
 		};
 
-		const cleanName = function( filename ) {
-			const opts = {
-				lower: optLower.checked,
-				umlaut: optUmlaut.checked
-			};
+		// Slugify a base name (no extension handling)
+		const slugify = function( str ) {
+			const lower = optLower.checked;
+			const umlaut = optUmlaut.checked;
 
-			// Split name / extension (keep dotfiles intact)
-			const lastDot = filename.lastIndexOf( '.' );
-			let name = lastDot > 0 ? filename.slice( 0, lastDot ) : filename;
-			let ext = lastDot > 0 ? filename.slice( lastDot + 1 ) : '';
-
-			if ( opts.lower ) {
-				name = name.toLowerCase();
-				ext = ext.toLowerCase();
-			}
-
-			name = transliterate( name, opts.umlaut );
-			ext = transliterate( ext, opts.umlaut );
+			let name = lower ? str.toLowerCase() : str;
+			name = transliterate( name, umlaut );
 
 			// Spaces, underscores and inner dots -> hyphen
 			name = name.replace( /[\s._]+/g, '-' );
 
 			// Strip everything that isn't a-z, A-Z, 0-9 or hyphen
 			name = name.replace( /[^a-zA-Z0-9-]/g, '' );
-			ext = ext.replace( /[^a-zA-Z0-9]/g, '' );
 
 			// Collapse and trim hyphens
 			name = name.replace( /-+/g, '-' ).replace( /^-+|-+$/g, '' );
 
-			if ( ! name ) name = 'datei';
+			return name || 'datei';
+		};
 
-			return ext ? name + '.' + ext : name;
+		// Clean a file extension (kept fixed, never user-editable)
+		const cleanExt = function( ext ) {
+			ext = optLower.checked ? ext.toLowerCase() : ext;
+			ext = transliterate( ext, optUmlaut.checked );
+			return ext.replace( /[^a-zA-Z0-9]/g, '' );
+		};
+
+		// Build base + ext from an original filename (keep dotfiles intact)
+		const splitOriginal = function( filename ) {
+			const lastDot = filename.lastIndexOf( '.' );
+			return {
+				base: lastDot > 0 ? filename.slice( 0, lastDot ) : filename,
+				ext: lastDot > 0 ? filename.slice( lastDot + 1 ) : ''
+			};
+		};
+
+		// Assemble the final filename from an item
+		const fullName = function( item ) {
+			return item.ext ? item.base + '.' + item.ext : item.base;
 		};
 
 		const render = function() {
 			list.innerHTML = '';
 
 			items.forEach( function( item, index ) {
-				const changed = item.clean !== item.file.name;
-
 				const row = document.createElement( 'div' );
 				row.className = 'file';
 
@@ -435,12 +459,43 @@
 				orig.className = 'file__orig';
 				orig.textContent = item.file.name;
 
-				const clean = document.createElement( 'div' );
-				clean.className = 'file__clean' + ( changed ? '' : ' is-unchanged' );
-				clean.textContent = item.clean;
+				// Editable base name (WordPress-permalink style), fixed extension
+				const edit = document.createElement( 'div' );
+				edit.className = 'file__edit';
+
+				const input = document.createElement( 'input' );
+				input.type = 'text';
+				input.className = 'file__input';
+				input.value = item.base;
+				input.spellcheck = false;
+				input.setAttribute( 'aria-label', 'Dateiname bearbeiten' );
+
+				const commit = function() {
+					const slug = slugify( input.value );
+					input.value = slug;
+					item.base = slug;
+					item.edited = true;
+				};
+
+				input.addEventListener( 'blur', commit );
+				input.addEventListener( 'keydown', function( e ) {
+					if ( e.key === 'Enter' ) {
+						e.preventDefault();
+						input.blur();
+					}
+				});
+
+				edit.appendChild( input );
+
+				if ( item.ext ) {
+					const ext = document.createElement( 'span' );
+					ext.className = 'file__ext';
+					ext.textContent = '.' + item.ext;
+					edit.appendChild( ext );
+				}
 
 				names.appendChild( orig );
-				names.appendChild( clean );
+				names.appendChild( edit );
 
 				const actions = document.createElement( 'div' );
 				actions.className = 'file__actions';
@@ -450,7 +505,7 @@
 				copyBtn.title = 'Namen kopieren';
 				copyBtn.textContent = '⧉';
 				copyBtn.addEventListener( 'click', function() {
-					navigator.clipboard.writeText( item.clean ).then( function() {
+					navigator.clipboard.writeText( fullName( item ) ).then( function() {
 						copyBtn.textContent = '✓';
 						setTimeout( function() { copyBtn.textContent = '⧉'; }, 1200 );
 					});
@@ -460,7 +515,7 @@
 				dlBtn.className = 'btn btn--download';
 				dlBtn.textContent = 'Download';
 				dlBtn.addEventListener( 'click', function() {
-					downloadFile( item.file, item.clean );
+					downloadFile( item.file, fullName( item ) );
 				});
 
 				const rmBtn = document.createElement( 'button' );
@@ -502,14 +557,28 @@
 
 		const addFiles = function( fileList ) {
 			Array.from( fileList ).forEach( function( file ) {
-				items.push( { file: file, clean: cleanName( file.name ) } );
+				const parts = splitOriginal( file.name );
+
+				items.push({
+					file: file,
+					base: slugify( parts.base ),
+					ext: cleanExt( parts.ext ),
+					edited: false
+				});
 			});
 			render();
 		};
 
 		const recompute = function() {
 			items.forEach( function( item ) {
-				item.clean = cleanName( item.file.name );
+				if ( item.edited ) {
+					// Keep manual name, but still apply the global format toggles
+					item.base = slugify( item.base );
+				} else {
+					const parts = splitOriginal( item.file.name );
+					item.base = slugify( parts.base );
+					item.ext = cleanExt( parts.ext );
+				}
 			});
 			render();
 		};
@@ -559,16 +628,17 @@
 			const used = {};
 
 			items.forEach( function( item ) {
-				let name = item.clean;
+				const original = fullName( item );
+				let name = original;
 
 				// Avoid collisions inside the ZIP
 				if ( used[name] ) {
 					const dot = name.lastIndexOf( '.' );
 					const base = dot > 0 ? name.slice( 0, dot ) : name;
 					const ext = dot > 0 ? name.slice( dot ) : '';
-					name = base + '-' + ( ++used[item.clean] ) + ext;
+					name = base + '-' + ( ++used[original] ) + ext;
 				} else {
-					used[item.clean] = 1;
+					used[original] = 1;
 				}
 
 				zip.file( name, item.file );
