@@ -224,7 +224,7 @@
 		.file__edit {
 			display: flex;
 			align-items: center;
-			margin-top: 2px;
+			margin-top: 5px;
 			min-width: 0;
 		}
 
@@ -262,6 +262,49 @@
 			font-size: 0.92rem;
 			font-weight: 600;
 			padding-left: 1px;
+		}
+
+		.file__alt {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			margin-top: 9px;
+			min-width: 0;
+		}
+
+		.file__alt-label {
+			flex-shrink: 0;
+			font-size: 0.72rem;
+			font-weight: 600;
+			letter-spacing: 0.03em;
+			text-transform: uppercase;
+			color: var( --text-dim );
+		}
+
+		.file__alt-text {
+			flex: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			font-size: 0.82rem;
+			color: var( --text );
+		}
+
+		.file__alt-copy {
+			flex-shrink: 0;
+			background: transparent;
+			border: none;
+			color: var( --text-dim );
+			cursor: pointer;
+			font-size: 0.85rem;
+			line-height: 1;
+			padding: 2px 4px;
+			border-radius: 4px;
+		}
+
+		.file__alt-copy:hover {
+			color: var( --text );
 		}
 
 		.file__actions {
@@ -492,6 +535,15 @@
 			return item.ext ? item.base + '.' + item.ext : item.base;
 		};
 
+		// Derive a readable alt-tag suggestion from a slug (bergsee-walchensee -> Bergsee Walchensee)
+		const humanize = function( base ) {
+			return base
+				.split( '-' )
+				.filter( Boolean )
+				.map( function( w ) { return w.charAt( 0 ).toUpperCase() + w.slice( 1 ); })
+				.join( ' ' );
+		};
+
 		const render = function() {
 			list.innerHTML = '';
 
@@ -521,12 +573,40 @@
 				if ( optSeq.checked ) {
 					input.disabled = true;
 				} else {
+					// Select the whole name on first focus, allow caret placement afterwards
+					let selectedOnFocus = false;
+
+					input.addEventListener( 'focus', function() {
+						input.select();
+					});
+
+					input.addEventListener( 'mouseup', function( e ) {
+						if ( ! selectedOnFocus ) {
+							e.preventDefault();
+							selectedOnFocus = true;
+						}
+					});
+
+					input.addEventListener( 'blur', function() {
+						selectedOnFocus = false;
+					});
+
+					// Live alt-tag preview from the raw (unformatted) typed text
+					input.addEventListener( 'input', function() {
+						item.alt = input.value.trim() || humanize( slugify( input.value ) );
+						item.edited = true;
+						altText.textContent = item.alt;
+					});
+
 					const commit = function() {
-						const slug = slugify( input.value );
+						const raw = input.value;
+						const slug = slugify( raw );
 						input.value = slug;
 						item.base = slug;
-						item.manualBase = input.value;
+						item.manualBase = raw;
+						item.alt = raw.trim() || humanize( slug );
 						item.edited = true;
+						altText.textContent = item.alt;
 					};
 
 					input.addEventListener( 'blur', commit );
@@ -549,6 +629,34 @@
 
 				names.appendChild( orig );
 				names.appendChild( edit );
+
+				// Alt-tag suggestion (readable, unformatted) with copy button
+				const alt = document.createElement( 'div' );
+				alt.className = 'file__alt';
+
+				const altLabel = document.createElement( 'span' );
+				altLabel.className = 'file__alt-label';
+				altLabel.textContent = 'Alt-Tag:';
+
+				const altText = document.createElement( 'span' );
+				altText.className = 'file__alt-text';
+				altText.textContent = item.alt;
+
+				const altCopy = document.createElement( 'button' );
+				altCopy.className = 'file__alt-copy';
+				altCopy.title = 'Alt-Tag kopieren';
+				altCopy.textContent = '⧉';
+				altCopy.addEventListener( 'click', function() {
+					navigator.clipboard.writeText( item.alt ).then( function() {
+						altCopy.textContent = '✓';
+						setTimeout( function() { altCopy.textContent = '⧉'; }, 1200 );
+					});
+				});
+
+				alt.appendChild( altLabel );
+				alt.appendChild( altText );
+				alt.appendChild( altCopy );
+				names.appendChild( alt );
 
 				const actions = document.createElement( 'div' );
 				actions.className = 'file__actions';
@@ -631,16 +739,18 @@
 
 				items.forEach( function( item, i ) {
 					item.base = base + '-' + String( i + 1 ).padStart( width, '0' );
+					item.alt = humanize( item.base );
 				});
 			} else {
 				items.forEach( function( item ) {
 					if ( item.edited ) {
-						// Keep manual name, but still apply the global format toggles
+						// Keep manual name and its readable alt text, only re-apply format toggles
 						item.base = slugify( item.manualBase );
 					} else {
 						const parts = splitOriginal( item.file.name );
 						item.base = slugify( parts.base );
 						item.ext = cleanExt( parts.ext );
+						item.alt = humanize( item.base );
 					}
 				});
 			}
